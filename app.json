@@ -11,9 +11,19 @@
     "ios": {
       "supportsTablet": true
     },
-    "android": {},
+    "android": {
+      "package": "com.yngridvieira.minhaconfeitaria"
+    },
     "web": {
       "bundler": "metro"
+    },
+    "plugins": [
+      "expo-sqlite"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "39842a1c-0b51-45c5-8f19-e7aa7022c6ee"
+      }
     }
   }
 }
