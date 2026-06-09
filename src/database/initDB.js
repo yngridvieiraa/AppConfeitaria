@@ -1,16 +1,13 @@
-// src/database/initDB.js
 import * as SQLite from 'expo-sqlite';
 
 const dbPromise = SQLite.openDatabaseAsync('minha_confeitaria.db');
 
 export async function initDatabase() {
   try {
-    const db = await dbPromise; // Espera o banco abrir
-    
-    // Executa a criação das tabelas em segundo plano
+    const db = await dbPromise;
     await db.execAsync(`
       PRAGMA journal_mode = WAL;
-      PRAGMA foreign_keys = ON;
+      PRAGMA foreign_keys = OFF;
 
       CREATE TABLE IF NOT EXISTS stock (
         id TEXT PRIMARY KEY,
@@ -37,15 +34,21 @@ export async function initDatabase() {
         FOREIGN KEY (recipeId) REFERENCES recipes (id) ON DELETE CASCADE,
         FOREIGN KEY (stockId) REFERENCES stock (id) ON DELETE RESTRICT
       );
-
+      
       CREATE TABLE IF NOT EXISTS orders (
         id TEXT PRIMARY KEY,
         customer TEXT NOT NULL,
-        recipeId TEXT NOT NULL,
+        recipeId TEXT, 
         qty REAL NOT NULL,
         date TEXT NOT NULL,
         status TEXT NOT NULL,
-        FOREIGN KEY (recipeId) REFERENCES recipes (id) ON DELETE RESTRICT
+        phone TEXT,
+        address TEXT,
+        deliveryTime TEXT,
+        paymentMethod TEXT,
+        productionStart TEXT,
+        productionEnd TEXT,
+        details TEXT
       );
     `);
     console.log("Banco de dados SQLite inicializado com sucesso!");

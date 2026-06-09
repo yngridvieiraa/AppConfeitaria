@@ -1,4 +1,3 @@
-// src/database/queries.js
 import dbPromise from './initDB';
 
 export async function fetchStocks() {
@@ -57,11 +56,26 @@ export async function fetchOrders() {
   return await db.getAllAsync('SELECT * FROM orders');
 }
 
+// ESTA É A FUNÇÃO QUE FOI EXPANSA COM OS NOVOS CAMPOS:
 export async function upsertOrder(order) {
   const db = await dbPromise;
   await db.runAsync(
-    'INSERT OR REPLACE INTO orders (id, customer, recipeId, qty, date, status) VALUES (?, ?, ?, ?, ?, ?)',
-    [order.id, order.customer, order.recipeId, order.qty, order.date, order.status]
+    'INSERT OR REPLACE INTO orders (id, customer, recipeId, qty, date, status, phone, address, deliveryTime, paymentMethod, productionStart, productionEnd, details) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      order.id, 
+      order.customer, 
+      order.recipeId, 
+      order.qty, 
+      order.date, 
+      order.status,
+      order.phone,
+      order.address,
+      order.deliveryTime,
+      order.paymentMethod,
+      order.productionStart,
+      order.productionEnd,
+      order.details
+    ]
   );
 }
 

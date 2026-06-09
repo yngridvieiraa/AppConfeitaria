@@ -1,20 +1,27 @@
 import { useEffect, useMemo, useState } from "react";
-import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View } from "react-native";
+import { KeyboardAvoidingView, Platform, SafeAreaView, ScrollView, StatusBar, StyleSheet, Text, View, Pressable, Alert } from "react-native";
 
 // Bancos de dados
 import { initDatabase } from "./src/database/initDB";
 import * as DB from "./src/database/queries";
 
 // Utilitários
-import { emptyDb, emptyStockForm, emptyRecipeForm, emptyIngredientForm, emptyOrderForm, unitMap } from "./src/utilitarios/constants";
+import { emptyDb, emptyStockForm, emptyRecipeForm, emptyIngredientForm, unitMap } from "./src/utilitarios/constants";
 import { createId, parseNumber, today } from "./src/utilitarios/helpers";
 import { canConvert, stockCheck, toBaseQty } from "./src/utilitarios/calculations";
 
 // Componentes UI e Telas
-import { SmallButton, SummaryCard } from "./src/componentes/UI";
+import { SummaryCard } from "./src/componentes/UI";
 import DespensaScreen from "./src/screens/despensa";
 import ReceitasScreen from "./src/screens/receitas";
 import EncomendasScreen from "./src/screens/encomendas";
+
+// Configuração expandida do formulário de encomendas
+const emptyOrderFormExpanded = {
+  id: "", customer: "", recipeId: "", qty: "1", date: today(), status: "Aberta",
+  phone: "", address: "", deliveryTime: "", paymentMethod: "",
+  productionStart: "", productionEnd: "", details: ""
+};
 
 export default function App() {
   const [db, setDb] = useState(emptyDb);
@@ -25,13 +32,12 @@ export default function App() {
   const [recipeForm, setRecipeForm] = useState(emptyRecipeForm);
   const [ingredientForm, setIngredientForm] = useState(emptyIngredientForm);
   const [ingredientDraft, setIngredientDraft] = useState([]);
-  const [orderForm, setOrderForm] = useState(emptyOrderForm);
+  const [orderForm, setOrderForm] = useState(emptyOrderFormExpanded);
 
-  // INICIALIZAÇÃO E CARREGAMENTO DE DADOS
   useEffect(() => {
     async function setup() {
       await initDatabase();
-      await loadData(); // Busca os dados do banco real!
+      await loadData();
       setLoaded(true);
     }
     setup();
@@ -58,9 +64,7 @@ export default function App() {
   function updateIngredientForm(field, value) { setIngredientForm((current) => ({ ...current, [field]: value })); }
   function updateOrderForm(field, value) { setOrderForm((current) => ({ ...current, [field]: value })); }
 
-  // ==========================================
-  // AÇÕES DE ESTOQUE LIGADAS AO SQLITE
-  // ==========================================
+  // AÇÕES DE ESTOQUE
   async function saveStock() {
     const item = {
       id: stockForm.id || createId("stock"),
@@ -73,17 +77,14 @@ export default function App() {
     };
 
     if (!item.name || stockForm.qty.trim() === "" || stockForm.cost.trim() === "") {
-      alert("Preencha nome, quantidade e valor pago.");
-      return;
+      alert("Preencha nome, quantidade e valor pago."); return;
     }
-
     if (!canConvert(item.unit, item.packageUnit)) {
-      alert("A unidade do estoque precisa combinar com a unidade da compra.");
-      return;
+      alert("A unidade do estoque precisa combinar com a unidade da compra."); return;
     }
 
-    await DB.upsertStock(item); // Salva no banco de dados físico
-    await loadData();           // Atualiza a tela com os dados novos
+    await DB.upsertStock(item);
+    await loadData();
     setStockForm(emptyStockForm);
   }
 
@@ -97,17 +98,12 @@ export default function App() {
 
   async function deleteStock(id) {
     const isUsed = db.recipes.some((recipe) => recipe.ingredients.some((ing) => ing.stockId === id));
-    if (isUsed) {
-      alert("Este insumo está sendo usado em uma receita.");
-      return;
-    }
-    await DB.deleteStock(id); // Deleta do banco
-    await loadData();         // Atualiza a tela
+    if (isUsed) { alert("Este insumo está sendo usado em uma receita."); return; }
+    await DB.deleteStock(id);
+    await loadData();
   }
 
-  // ==========================================
-  // AÇÕES DE RECEITAS LIGADAS AO SQLITE
-  // ==========================================
+  // AÇÕES DE RECEITAS
   function addIngredient() {
     const item = db.stock.find((entry) => entry.id === ingredientForm.stockId);
     const qty = parseNumber(ingredientForm.qty);
@@ -129,9 +125,8 @@ export default function App() {
 
     if (!recipe.name || !recipe.ingredients.length) { alert("Informe o nome e pelo menos um ingrediente."); return; }
     
-    await DB.upsertRecipe(recipe); // Salva a receita e seus ingredientes no SQLite
-    await loadData();              // Atualiza a tela
-    
+    await DB.upsertRecipe(recipe);
+    await loadData();
     setRecipeForm(emptyRecipeForm);
     setIngredientDraft([]);
     setIngredientForm(emptyIngredientForm);
@@ -146,80 +141,170 @@ export default function App() {
   async function deleteRecipe(id) {
     const isUsed = db.orders.some((order) => order.recipeId === id);
     if (isUsed) { alert("Esta receita está vinculada a uma encomenda."); return; }
-    
-    await DB.deleteRecipe(id); // Deleta receita (e seus ingredientes, por causa do DELETE CASCADE)
+    await DB.deleteRecipe(id);
     await loadData();
   }
 
-  // ==========================================
-  // AÇÕES DE ENCOMENDAS LIGADAS AO SQLITE
-  // ==========================================
+  // AÇÕES DE ENCOMENDAS
   async function saveOrder() {
     const order = {
       id: orderForm.id || createId("order"),
       customer: orderForm.customer.trim(),
-      recipeId: orderForm.recipeId,
+      recipeId: orderForm.recipeId || "personalizado",
       qty: parseNumber(orderForm.qty),
       date: orderForm.date,
       status: orderForm.status,
+      phone: orderForm.phone ? orderForm.phone.trim() : "",
+      address: orderForm.address ? orderForm.address.trim() : "",
+      deliveryTime: orderForm.deliveryTime || "",
+      paymentMethod: orderForm.paymentMethod || "",
+      productionStart: orderForm.productionStart || "",
+      productionEnd: orderForm.productionEnd || "",
+      details: orderForm.details ? orderForm.details.trim() : ""
     };
 
-    if (!order.customer || !order.recipeId || !order.qty || !order.date) {
-      alert("Preencha cliente, receita, quantidade e data."); return;
+    if (!order.customer) {
+      alert("Por favor, digite o Nome do Cliente.");
+      return;
+    }
+    if (!order.date || order.date === "AAAA-MM-DD") {
+      alert("Por favor, digite uma Data de Entrega válida.");
+      return;
     }
 
-    await DB.upsertOrder(order); // Salva a encomenda no banco
-    await loadData();
-    setOrderForm({ ...emptyOrderForm, date: today() });
+    try {
+      await DB.upsertOrder(order);
+      await loadData();
+      setOrderForm(emptyOrderFormExpanded);
+      alert("Encomenda salva com sucesso! 🎉");
+    } catch (error) {
+      console.error("Erro ao salvar encomenda:", error);
+      alert("Erro crítico no banco de dados. Tente limpar o cache do navegador/app.");
+    }
   }
 
   function editOrder(order) {
     setOrderForm({
       id: order.id, customer: order.customer, recipeId: order.recipeId,
       qty: String(order.qty), date: order.date, status: order.status,
+      phone: order.phone || "", address: order.address || "", deliveryTime: order.deliveryTime || "",
+      paymentMethod: order.paymentMethod || "", productionStart: order.productionStart || "",
+      productionEnd: order.productionEnd || "", details: order.details || ""
     });
     setActiveTab("Encomendas");
   }
 
   async function deleteOrder(id) {
-    await DB.deleteOrder(id); // Deleta a encomenda do banco
+    await DB.deleteOrder(id);
     await loadData();
   }
 
+  // FUNÇÃO BLINDADA DE BAIXA DE ESTOQUE
   async function produceOrder(id) {
+    const executarBaixa = async () => {
+      try {
+        const order = db.orders.find((entry) => entry.id === id);
+        const recipe = order ? db.recipes.find((entry) => entry.id === order.recipeId) : null;
+        if (!order) return;
+
+        if (recipe) {
+          const check = stockCheck(recipe, db.stock, order.qty);
+          if (!check.ok) { 
+            setTimeout(() => {
+              Alert.alert("Estoque Insuficiente ⚠️", "Você não tem ingredientes suficientes na Despensa.");
+            }, 500);
+            return; 
+          }
+
+          for (const item of db.stock) {
+            const usedByRecipe = recipe.ingredients.filter((ing) => ing.stockId === item.id);
+            
+            if (usedByRecipe.length > 0) {
+              const safeOrderQty = Number(order.qty) || 1;
+              
+              const usedBase = usedByRecipe.reduce((sum, ing) => {
+                const ingQty = Number(ing.qty) || 0;
+                return sum + toBaseQty(ingQty * safeOrderQty, ing.unit);
+              }, 0);
+              
+              const availableBase = toBaseQty(Number(item.qty) || 0, item.unit);
+              const remainingBase = Math.max(0, availableBase - usedBase);
+              
+              const factor = (unitMap && unitMap[item.unit]) ? unitMap[item.unit].factor : 1;
+              const finalQty = remainingBase / factor;
+
+              const updatedItem = { ...item, qty: finalQty };
+              await DB.upsertStock(updatedItem);
+            }
+          }
+        }
+
+        const updatedOrder = { ...order, status: "Produzida" };
+        await DB.upsertOrder(updatedOrder);
+        await loadData();
+        
+        setTimeout(() => {
+          Alert.alert("Sucesso! 🎉", "Baixa no estoque realizada com sucesso.");
+        }, 500);
+
+      } catch (error) {
+        console.error("Erro na baixa de estoque:", error);
+        setTimeout(() => {
+          Alert.alert("Erro Técnico 🐛", "Motivo exato: " + error.message);
+        }, 500);
+      }
+    };
+
+    if (Platform.OS === "web") {
+      const confirmacao = window.confirm("Dar baixa no estoque?\nIsso vai descontar os ingredientes desta encomenda da sua despensa.");
+      if (confirmacao) executarBaixa();
+    } else {
+      Alert.alert(
+        "Dar baixa no estoque?",
+        "Isso vai descontar os ingredientes desta encomenda da sua despensa.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Sim, dar baixa", onPress: executarBaixa }
+        ]
+      );
+    }
+  }
+
+  // FUNÇÃO DE DESFAZER A BAIXA
+  async function undoProduceOrder(id) {
     const order = db.orders.find((entry) => entry.id === id);
     const recipe = order ? db.recipes.find((entry) => entry.id === order.recipeId) : null;
+    if (!order || order.status === "Aberta") return;
 
-    if (!order || !recipe) return;
-
-    const check = stockCheck(recipe, db.stock, order.qty);
-    if (!check.ok) { alert("Estoque insuficiente para produzir."); return; }
-
-    // Deduz o estoque usado e salva os novos valores no banco
-    for (const item of db.stock) {
-      const usedByRecipe = recipe.ingredients.filter((ing) => ing.stockId === item.id);
-      if (usedByRecipe.length) {
-        const usedBase = usedByRecipe.reduce((sum, ing) => sum + toBaseQty(Number(ing.qty) * Number(order.qty), ing.unit), 0);
-        const remainingBase = toBaseQty(item.qty, item.unit) - usedBase;
-        
-        const updatedItem = { ...item, qty: Math.max(0, remainingBase / unitMap[item.unit].factor) };
-        await DB.upsertStock(updatedItem);
+    if (recipe) {
+      for (const item of db.stock) {
+        const usedByRecipe = recipe.ingredients.filter((ing) => ing.stockId === item.id);
+        if (usedByRecipe.length) {
+          const usedBase = usedByRecipe.reduce((sum, ing) => sum + toBaseQty(Number(ing.qty) * Number(order.qty), ing.unit), 0);
+          const remainingBase = toBaseQty(item.qty, item.unit) + usedBase;
+          const updatedItem = { ...item, qty: remainingBase / unitMap[item.unit].factor };
+          await DB.upsertStock(updatedItem);
+        }
       }
     }
 
-    // Atualiza o status da encomenda
-    const updatedOrder = { ...order, status: "Produzida" };
+    const updatedOrder = { ...order, status: "Aberta" };
     await DB.upsertOrder(updatedOrder);
-    
-    // Recarrega tudo para refletir a nova realidade da confeitaria
     await loadData();
+    alert("Baixa desfeita! Os ingredientes voltaram para a despensa.");
   }
+
+  if (!loaded) return null;
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" backgroundColor="#f7f4ef" />
-      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.keyboard}>
-        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === "ios" ? "padding" : "height"} 
+        style={styles.keyboard}
+        keyboardVerticalOffset={Platform.OS === "android" ? 40 : 0}
+      >
+        <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" style={{ flex: 1 }}>
           
           <View style={styles.header}>
             <View>
@@ -251,7 +336,19 @@ export default function App() {
           )}
 
           {activeTab === "Encomendas" && (
-            <EncomendasScreen stock={db.stock} recipes={db.recipes} orders={db.orders} form={orderForm} updateForm={updateOrderForm} saveOrder={saveOrder} editOrder={editOrder} deleteOrder={deleteOrder} produceOrder={produceOrder} resetForm={() => setOrderForm({ ...emptyOrderForm, date: today() })} />
+            <EncomendasScreen 
+              stock={db.stock} 
+              recipes={db.recipes} 
+              orders={db.orders} 
+              form={orderForm} 
+              updateForm={updateOrderForm} 
+              saveOrder={saveOrder} 
+              editOrder={editOrder} 
+              deleteOrder={deleteOrder} 
+              produceOrder={produceOrder} 
+              undoProduceOrder={undoProduceOrder}
+              resetForm={() => setOrderForm(emptyOrderFormExpanded)} 
+            />
           )}
 
         </ScrollView>

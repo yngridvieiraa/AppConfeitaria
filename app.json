@@ -4,7 +4,13 @@
     "slug": "minha-confeitaria",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/splash-icon.png",
     "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF8F2"
+    },
     "assetBundlePatterns": [
       "**/*"
     ],
@@ -12,7 +18,11 @@
       "supportsTablet": true
     },
     "android": {
-      "package": "com.yngridvieira.minhaconfeitaria"
+      "package": "com.yngridvieira.minhaconfeitaria",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/splash-icon.png",
+        "backgroundColor": "#FFF8F2"
+      }
     },
     "web": {
       "bundler": "metro"
